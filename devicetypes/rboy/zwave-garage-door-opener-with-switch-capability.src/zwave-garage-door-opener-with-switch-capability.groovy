@@ -21,7 +21,7 @@
  */ 
  
 def clientVersion() {
-    return "02.05.04"
+    return "03.00.01"
 }
 
 /*
@@ -29,6 +29,9 @@ def clientVersion() {
  * Changes Copyright RBoy Apps, redistribution of any changes or modified code is not allowed without permission
  *
  * Change Log
+ * 2020-11-04 - (v03.00.01) Added setting to reset low battery notification
+ * 2020-10-14 - (v03.00.00) Support for new ST app
+ * 2020-02-06 - (v02.05.05) Update device health
  * 2019-06-05 - (v02.05.04) Send DH details in parse so it doesn't interfere with device health
  * 2018-10-16 - (v02.05.03) Updated support for new ST app
  * 2018-08-05 - (v02.05.02) Added health check and basic support for the new ST app
@@ -66,7 +69,7 @@ def clientVersion() {
  */
  
 metadata {
-	definition (name: "Z-Wave Garage Door Opener with Switch Capability", namespace: "rboy", author: "RBoy Apps", ocfDeviceType: "oic.d.garagedoor", mnmn: "SmartThings", vid:"generic-contact-4") {
+	definition (name: "Z-Wave Garage Door Opener with Switch Capability", namespace: "rboy", author: "RBoy Apps", mnmn: "SmartThingsCommunity", vid:"0b0e9a8f-39c8-3cab-a1d1-d90625a5ab0f") {
 		capability "Actuator"
 		capability "Door Control"
 		capability "Garage Door Control"
@@ -78,13 +81,15 @@ metadata {
         capability "Relay Switch"
         capability "Momentary"
         capability "Battery"
+        capability "Configuration"
         capability "Health Check"
+        capability "rboyapps.versioning"
         
         command "resetBattery"
         
         attribute "lowBattery", "string"
-        attribute "codeVersion", "string"
-        attribute "dhName", "string"
+        ///attribute "codeVersion", "string"
+        ///attribute "dhName", "string"
 
 		fingerprint deviceId: "0x4007", inClusters: "0x98"
 		fingerprint deviceId: "0x4006", inClusters: "0x98"
@@ -105,6 +110,7 @@ metadata {
 
     preferences {
         input title: "", description: "Z-Wave Garage Door Opener Device Handler v${clientVersion()}", displayDuringSetup: false, type: "paragraph", element: "paragraph"
+        input "dummyReset", "bool", title: "Reset low battery", description: "Toggle to reset battery level"
     }
 
 	tiles(scale: 2) {
@@ -155,7 +161,13 @@ metadata {
 
 import physicalgraph.zwave.commands.barrieroperatorv1.*
 
-def installed(){
+def uninstalled() {
+    log.trace "Uninstalled called"
+}
+
+def installed() {
+    log.trace "Installed called"
+
     // Device-Watch simply pings if no device events received for 32min(checkInterval)
 	sendEvent(name: "checkInterval", value: 2 * 15 * 60 + 2 * 60, displayed: false, data: [protocol: "zwave", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
 	
@@ -166,24 +178,32 @@ def installed(){
 	}
 }
 
-def updated(){
-	log.trace "Update called settings: $settings"
+def updated() {
+	log.trace "Updated called settings: $settings"
 
     // Device-Watch simply pings if no device events received for 32min(checkInterval)
 	sendEvent(name: "checkInterval", value: 2 * 15 * 60 + 2 * 60, displayed: false, data: [protocol: "zwave", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
+    resetBattery()
 	
     try {
         response(refresh()) // Get the updates
 	} catch (e) {
 		log.warn "updated() threw $e"
 	}
+}
+
+def configure() {
+    log.trace "Configure called"
+    resetBattery()
 }
 
 /**
  * PING is used by Device-Watch in attempt to reach the Device
  * */
 def ping() {
-	refresh()
+	log.trace "Ping called"
+	// Just get device state, there's no need to flood more commands
+	sendHubCommand(new physicalgraph.device.HubAction(secure(zwave.barrierOperatorV1.barrierOperatorGet())))
 }
 
 /**
@@ -443,8 +463,9 @@ def poll() {
 	// Get the latest status
 	delayBetween([
     	secure(zwave.barrierOperatorV1.barrierOperatorGet()),
+        secure(zwave.batteryV1.batteryGet()), // Try to get battery level using secure channel
         zwave.batteryV1.batteryGet().format(), // Try to get battery level
-        state.MSR ? null : zwave.manufacturerSpecificV2.manufacturerSpecificGet().format() // Get the MSR if it doesnt' exist
+        state.MSR ? [] : zwave.manufacturerSpecificV2.manufacturerSpecificGet().format() // Get the MSR if it doesnt' exist
         ], 2000)
 }
 

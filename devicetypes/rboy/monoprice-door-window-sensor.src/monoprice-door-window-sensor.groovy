@@ -21,7 +21,7 @@
  */ 
  
 def clientVersion() {
-    return "02.01.06"
+    return "02.01.09"
 }
 
 /**
@@ -29,6 +29,9 @@ def clientVersion() {
  * 
  * Copyright RBoy Apps, redistribution or reuse of code is not allowed without permission
  * Change log:
+ * 2020-02-06 - (v02.01.09) Update device health
+ * 2020-01-20 - (v02.01.08) Fix for broken ST Android Classic app 2.18
+ * 2019-11-05 - (v02.01.07) Update device health check protocol
  * 2019-06-11 - (v02.01.06) Updated support for new ST app missing contact sensor
  * 2018-11-13 - (v02.01.05) Updated support for new ST app
  * 2018-11-13 - (v02.01.04) Updated support for new ST app
@@ -96,7 +99,7 @@ metadata {
             }
         }
 		valueTile("battery", "device.battery", width: 2, height: 2, inactiveLabel: false) {
-            state "battery", label:'${currentValue}%', unit: "", icon: "http://smartthings.rboyapps.com/images/battery.png",
+            state "battery", label:'${currentValue}%', unit: "", icon: "https://www.rboyapps.com/images/battery.png",
                 backgroundColors:[
                     [value: 15, color: "#ff0000"],
                     [value: 30, color: "#fd4e3a"],
@@ -291,7 +294,7 @@ def zwaveEvent(physicalgraph.zwave.commands.wakeupv2.WakeUpNotification cmd)
         
         if (state.MSR == "0208-0201-0008") { // 24259 has default wake up set to 0 (never), wake once every 25 hours to get battery report (battery is update after 24 hours since lsat report)
             log.info "Settings wake up interval to 25 hours" // NOTE: Bug with firmware it doesn't set the value, it's always 0 (wake up when sensor opens)
-            sendEvent(name: "checkInterval", value: 30 * 60 * 60 + 2 * 60, displayed: false, data: [protocol: "zwave", hubHardwareId: device.hub.hardwareID]) // Set device health event check interval to about 30 hours
+            sendEvent(name: "checkInterval", value: 30 * 60 * 60 + 2 * 60, displayed: false, data: [protocol: "zwave", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"]) // Set device health event check interval to about 30 hours
             cmds << zwave.wakeUpV2.wakeUpIntervalSet(seconds:25*60*60, nodeid:zwaveHubNodeId) // Set the wake up interval
             cmds << zwave.wakeUpV2.wakeUpIntervalGet() // Check our current wake up interval
             cmds << zwave.wakeUpV2.wakeUpIntervalCapabilitiesGet() // Get Wake up interval capabilities

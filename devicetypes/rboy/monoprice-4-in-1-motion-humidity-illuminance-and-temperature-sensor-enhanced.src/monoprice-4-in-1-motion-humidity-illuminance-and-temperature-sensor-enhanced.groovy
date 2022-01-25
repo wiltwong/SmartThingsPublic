@@ -21,7 +21,7 @@
  */ 
  
 def clientVersion() {
-    return "01.00.06"
+    return "02.00.01"
 }
 
 /**
@@ -29,13 +29,18 @@ def clientVersion() {
  * 
  * Copyright RBoy Apps, redistribution or reuse of code is not allowed without permission
  * Change log:
- * 2018-8-23 - (v01.00.06) Don't show decimal for Humidity in Android devices
- * 2018-8-5 - (v01.00.05) Added Health Check capability
- * 2018-8-2 - (v01.00.04) Added basic support for new ST app
- * 2018-1-31 - (v01.00.03) Updated layout to show all sensors on a single screen and temperature offset is now in decimal points
- * 2018-1-12 - (v01.00.02) Update for security descriptors
+ * 2021-06-10 - (v02.00.01) Update for broken settings in new app
+ * 2020-10-19 - (v02.00.00) New ST app custom UI
+ * 2020-02-06 - (v01.00.09) Update device health
+ * 2020-01-20 - (v01.00.08) Fix for broken ST Android Classic app 2.18
+ * 2019-11-05 - (v01.00.07) Update device health check protocol
+ * 2018-08-23 - (v01.00.06) Don't show decimal for Humidity in Android devices
+ * 2018-08-05 - (v01.00.05) Added Health Check capability
+ * 2018-08-02 - (v01.00.04) Added basic support for new ST app
+ * 2018-01-31 - (v01.00.03) Updated layout to show all sensors on a single screen and temperature offset is now in decimal points
+ * 2018-01-12 - (v01.00.02) Update for security descriptors
  * 2017-10-18 - (v01.00.01) Update tile layout with ST mobile app release 2.8.0
- * 2017-7-14 - (v01.00.00) Initial release
+ * 2017-07-14 - (v01.00.00) Initial release
  *
  *  Copyright 2014 SmartThings
  *
@@ -60,7 +65,7 @@ preferences {
 	input title: "", description: "The temperature sensitivity threshold represents how much the temperature levels should change before reporting it. The threshold can vary from 0.1° (very sensitive) to 5° (least sensitive) (default is 1.0)", displayDuringSetup: false, type: "paragraph", element: "paragraph"
     input "tempSensitivity", "decimal", title: "Temperature Sensitivity", displayDuringSetup: false, range: "0.1..5.0"
 	input title: "", description: "Temperature correction offset is a +ve or -ve number to correct the temperature reported by the sensor", displayDuringSetup: false, type: "paragraph", element: "paragraph"
-    input "tempOffset", "decimal", title: "Temperature correction offset", displayDuringSetup: false, range: "*..*"
+    input "tempOffset", "decimal", title: "Temperature correction offset", displayDuringSetup: false, range: "-100..100"
 	input title: "", description: "Set the motion detection sensitivity level. 1 is MOST sensitive and 7 is LEAST sensitive (default is 4)", displayDuringSetup: false, type: "paragraph", element: "paragraph"
     input "pirSensitivity", "number", title: "Motion Sensitivity", displayDuringSetup: false, range: "1..7"
 	input title: "", description: "The light sensitivity threshold represents what % the light levels should change before reporting it. The threshold can vary from 5% (very sensitive) to 50% (least sensitive) (default is 10%)", displayDuringSetup: false, type: "paragraph", element: "paragraph"
@@ -70,15 +75,15 @@ preferences {
 	input title: "", description: "The humidity sensitivity threshold represents what % the humidity levels should change before reporting it. The threshold can vary from 1% (very sensitive) to 50% (least sensitive) (default is 10%)", displayDuringSetup: false, type: "paragraph", element: "paragraph"
     input "humiditySensitivity", "number", title: "Humidity Sensitivity", displayDuringSetup: false, range: "1..50"
 	input title: "", description: "Humidity correction offset is a +ve or -ve number to correct the humidity reported by the sensor", displayDuringSetup: false, type: "paragraph", element: "paragraph"
-    input "humidityOffset", "number", title: "Humidity correction offset", displayDuringSetup: false, range: "*..*"
-	input title: "", description: "The LED can work in 4 modes:\n(LED Off) Mode 1 the LED is Off\n(Pulsing) Mode 2 the LED Breathes for a temperature change and Flashes for motion detection (NOTE: This reduces battery life)\n(Quick Flash) Mode 3 the LED flashes for both temperature and motion", displayDuringSetup: false, type: "paragraph", element: "paragraph"
+    input "humidityOffset", "number", title: "Humidity correction offset", displayDuringSetup: false, range: "-100..100"
+	input title: "", description: "The LED can work in 3 modes:\n(LED Off) Mode 1 the LED is Off\n(Pulsing) Mode 2 the LED Breathes for a temperature change and Flashes for motion detection (NOTE: This reduces battery life)\n(Quick Flash) Mode 3 the LED flashes for both temperature and motion", displayDuringSetup: false, type: "paragraph", element: "paragraph"
     input "ledConfig", "enum", title: "LED Notifications", displayDuringSetup: false, options: ["1":"LED Off", "2":"Breathing", "3":"Quick Flash"]
 	input title: "", description: "If you want to force a manual poll of the temperature/motion/battery status, enter the polling interval in seconds in increments of 600 seconds (minimum 600, maximum 604800, in intervals of 600 seconds). Leave it blank to use the default value\nNOTE: Polling will reduce battery life", displayDuringSetup: false, type: "paragraph", element: "paragraph"
     input "manualPollInterval", "number", title: "Manual Poll Interval (seconds)", displayDuringSetup: false, range: "600..604800"
 }
 
 metadata {
-    definition (name:"Monoprice 4 in 1 Motion, Humidity, Illuminance and Temperature Sensor (Enhanced)", namespace:"rboy", author: "RBoy Apps", ocfDeviceType: "x.com.st.d.sensor.motion", mnmn: "SmartThings", vid:"SmartThings-smartthings-Aeon_Multisensor") {
+    definition (name:"Monoprice 4 in 1 Motion, Humidity, Illuminance and Temperature Sensor (Enhanced)", namespace:"rboy", author: "RBoy Apps", ocfDeviceType: "x.com.st.d.sensor.motion", mnmn: "SmartThingsCommunity", vid:"c0d950cc-0e47-333d-b6cf-912b5e79657f") {
 		capability "Configuration"
         capability "Sensor"
         capability "Motion Sensor"
@@ -88,10 +93,12 @@ metadata {
         capability "Battery"
         capability "Tamper Alert"
         capability "Health Check"
+        capability "rboyapps.multiSensorDisplay"
+        capability "rboyapps.versioning"
         
-        attribute "codeVersion", "string"
-        attribute "dhName", "string"
-        attribute "display", "string"
+        ///attribute "codeVersion", "string"
+        ///attribute "dhName", "string"
+        ///attribute "dashboardDisplay", "string"
 
         fingerprint deviceId:"0x0701", inClusters: "0x5E,0x86,0x72,0x5A,0x85,0x59,0x73,0x80,0x71,0x31,0x70,0x84,0x7A,0x98", manufacturer: "Monoprice", model: "15902"
         
@@ -133,7 +140,7 @@ metadata {
 			)
 		}
 		valueTile("battery", "device.battery", width: 2, height: 2, inactiveLabel: false) {
-            state "battery", label:'${currentValue}%', unit: "", icon: "http://smartthings.rboyapps.com/images/battery.png", backgroundColors:[
+            state "battery", label:'${currentValue}%', unit: "", icon: "https://www.rboyapps.com/images/battery.png", backgroundColors:[
                 [value: 15, color: "#ff0000"],
                 [value: 30, color: "#fd4e3a"],
                 [value: 50, color: "#fda63a"],
@@ -166,7 +173,7 @@ metadata {
 			state("detected", label:'TAMPER', backgroundColor:"#e86d13")
 			state("clear", label:'', backgroundColor:"#FFFFFF")
 		}
-        standardTile("display", "device.display", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+        standardTile("display", "device.dashboardDisplay", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
             state "default", label:'${currentValue}', defaultState: true
             state "active", label:'motion', icon:"st.motion.motion.active", backgroundColor:"#00a0dc"
             state "inactive", label:'no motion', icon:"st.motion.motion.inactive", backgroundColor:"#ffffff"
@@ -183,6 +190,10 @@ private Double[] percentTable() {
 
 private Double[] luxTable() {
     return [ 0.0, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0 ]
+}
+
+def uninstalled() {
+	log.trace "Uninstalled called"
 }
 
 def installed() {
@@ -250,7 +261,7 @@ def zwaveEvent(physicalgraph.zwave.commands.securityv1.SecurityMessageEncapsulat
 
 def sensorValueEvent(def value) {
     if (!displaySensor || displaySensor == "Motion") { // Update summary display sensor
-        sendEvent(name: "display", value: value ? "active" : "inactive")
+        sendEvent(name: "dashboardDisplay", value: value ? "active" : "inactive")
     }
 
     if (value) {
@@ -488,7 +499,7 @@ def zwaveEvent(physicalgraph.zwave.commands.sensormultilevelv5.SensorMultilevelR
             map.unit = getTemperatureScale()
             map.descriptionText = "${device.displayName} temperature is ${map.value} °${map.unit}"
             if (displaySensor == "Temperature") { // Update summary display sensor
-                sendEvent(name: "display", value: map.value + "°")
+                sendEvent(name: "dashboardDisplay", value: map.value + " °" + map.unit)
             }
 			break;
             
@@ -503,9 +514,9 @@ def zwaveEvent(physicalgraph.zwave.commands.sensormultilevelv5.SensorMultilevelR
                 map.unit = "%"
             }
         	map.descriptionText = "${device.displayName} light is ${map.value}${map.unit}"
-        	sendEvent([name: "illuminanceX", value: map.value + map.unit])
+        	sendEvent([name: "illuminanceX", value: map.value + " " + map.unit])
             if (displaySensor == "Light") { // Update summary display sensor
-                sendEvent(name: "display", value: map.value + map.unit)
+                sendEvent(name: "dashboardDisplay", value: map.value + " " + map.unit)
             }
 			break;
             
@@ -515,7 +526,7 @@ def zwaveEvent(physicalgraph.zwave.commands.sensormultilevelv5.SensorMultilevelR
 			map.unit = "%"
             map.descriptionText = "${device.displayName} humidity is ${map.value}${map.unit}"
             if (displaySensor == "Humidity") { // Update summary display sensor
-                sendEvent(name: "display", value: map.value + map.unit)
+                sendEvent(name: "dashboardDisplay", value: map.value + " " + map.unit)
             }
 			break;
             
@@ -700,20 +711,20 @@ def configure() {
     
     switch(displaySensor) {
         case "Temperature":
-        	sendEvent(name: "display", value: device.currentValue("temperature") + "°")
+        	sendEvent(name: "dashboardDisplay", value: device.currentValue("temperature") + " °" + getTemperatureScale())
             break
         
         case "Humidity":
-        	sendEvent(name: "display", value: device.currentValue("humidity") + "%")
+        	sendEvent(name: "dashboardDisplay", value: device.currentValue("humidity") + " %")
         	break
             
         case "Light":
-        	sendEvent(name: "display", value: device.currentValue("illuminanceX"))
+        	sendEvent(name: "dashboardDisplay", value: device.currentValue("illuminanceX"))
         	break
             
         case "Motion":
         default:
-        	sendEvent(name: "display", value: device.currentValue("motion"))
+        	sendEvent(name: "dashboardDisplay", value: device.currentValue("motion"))
         	break
     }
 

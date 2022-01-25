@@ -21,7 +21,7 @@
  */ 
  
 def clientVersion() {
-    return "01.01.05"
+    return "02.00.03"
 }
 
 /**
@@ -29,6 +29,8 @@ def clientVersion() {
  * 
  * Copyright RBoy Apps, redistribution or reuse of code is not allowed without permission
  * Change log:
+ * 2020-10-15 - (v02.00.03) Support for new ST app UI custom controls, do refresh after configure
+ * 2020-02-06 - (v01.01.06) Update device health
  * 2019-02-04 - (v01.01.05) Display overload cutoff in events list
  * 2019-01-14 - (v01.01.04) Update for restoring default values in preferences if invalid option is entered
  * 2018-08-05 - (v01.01.03) Added health check capability
@@ -63,7 +65,7 @@ preferences {
 
 
 metadata {
-	definition (name: "Monoprice Plug In Receptacle", namespace: "rboy", author: "RBoy Apps", ocfDeviceType: "oic.d.switch", mnmn: "SmartThings", vid:"generic-switch-power-energy") {
+	definition (name: "Monoprice Plug In Receptacle", namespace: "rboy", author: "RBoy Apps", ocfDeviceType: "oic.d.switch", mnmn: "SmartThingsCommunity", vid:"6d145089-656d-3896-80f7-f0fa7d9f181a") {
         capability "Actuator"
 		capability "Sensor"
 		capability "Energy Meter"
@@ -77,14 +79,19 @@ metadata {
 		capability "Polling"
         capability "Configuration"
 		capability "Health Check"
+        capability "rboyapps.currentMeasurement"
+        capability "rboyapps.led"
+        capability "rboyapps.loadLevel"
+        capability "rboyapps.energyReset"
+        capability "rboyapps.versioning"
         
-        attribute "codeVersion", "string"
-        attribute "dhName", "string"
-        attribute "amperage", "number"
-        attribute "overloadX", "string"
+        ///attribute "codeVersion", "string"
+        ///attribute "dhName", "string"
+        ///attribute "current", "number"
+        ///attribute "loadLevel", "string"
         attribute "switchX", "string"
 
-		command "resetKWH"
+		///command "resetEnergy"
 
         // v1 fingerprints
         fingerprint deviceId:"0x1001", inClusters:"0x5E,0x25,0x32,0x27,0x2C,0x2B,0x70,0x85,0x59,0x72,0x86,0x7A,0x73,0x5A", manufacturer: "Monoprice", model: "27481"
@@ -116,23 +123,23 @@ metadata {
 		}
 		
         valueTile("energy", "device.energy", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-			state "default", label:'${currentValue} kWh', action:"resetKWH"
+			state "default", label:'${currentValue} kWh', action:"resetEnergy"
 		}
 		
         standardTile("resetKWH", "device.energy", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-			state "default", label:'reset kWh', action:"resetKWH"
+			state "default", label:'reset kWh', action:"resetEnergy"
 		}
 
 		valueTile("voltage", "device.voltage", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
 			state "default", label:'${currentValue} V'
 		}
 		
-		valueTile("amperage", "device.amperage", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+		valueTile("amperage", "device.current", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
 			state "default", label:'${currentValue} A'
 		}
 
-        standardTile("overload", "device.overloadX", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-			state "default", label:'', action:"", icon:"", backgroundColor: "#ffffff", defaultState: true
+        standardTile("overload", "device.loadLevel", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+			state "normal", label:'', action:"", icon:"", backgroundColor: "#ffffff", defaultState: true
 			state "heavyload", label:'Heavyload', action:"", icon:"", backgroundColor: "#ffd700"
 			state "overload", label:'Overload', action:"", icon:"", backgroundColor: "#e86d13"
 		}
@@ -156,6 +163,20 @@ metadata {
         main(["summary"])
         details(["summary", "autoOffTimerText", "autoOffTimer", "voltage", "ledindicator", "power", "amperage", "refresh", "energy"])
     }
+}
+
+import groovy.transform.Field
+
+@Field final int RESET_DELAY = 2
+
+// Sent delayed event
+def delayedEvent(data) {
+    log.trace "Sending delayed event: $data"
+    sendEvent(data)
+}
+
+def uninstalled() {
+    log.trace "Uninstalled called"
 }
 
 def installed() {
@@ -191,7 +212,9 @@ def updated() {
 }
 
 def ping() {
-	refresh()
+	log.trace "Ping called"
+	// Just get device state, there's no need to flood more commands
+	sendHubCommand(new physicalgraph.device.HubAction(command(zwave.switchBinaryV1.switchBinaryGet())))
 }
 
 def parse(String description) {
@@ -230,9 +253,9 @@ private switchReport(cmd) {
     def result = []
     
     if (cmd.value && (device.currentValue("switch") != "on")) { // Clear event when it's switched on (e.g. power failure or unplugged) and not if the refresh button is pressed
-        result << createEvent(name: "overloadX", value: "", displayed: false) // Reset overload/heavyload on on/off
+        result << createEvent(name: "loadLevel", value: "normal", displayed: false) // Reset overload/heavyload on on/off
         result << createEvent(name: "switchX", value: "on", displayed: false)
-    } else if (!cmd.value && device.currentValue("overloadX") != "overload") { // Mark off only if we don't have an overload cutoff as it turns off on cutOff but we want to users to know about it
+    } else if (!cmd.value && device.currentValue("loadLevel") != "overload") { // Mark off only if we don't have an overload cutoff as it turns off on cutOff but we want to users to know about it
         result << createEvent(name: "switchX", value: "off", displayed: false)
     }
 
@@ -283,7 +306,7 @@ def zwaveEvent(physicalgraph.zwave.commands.notificationv3.NotificationReport cm
                 	switch (cmd.eventParameter[0]) {
                         case 0x08:
                             log.info "Cleared Overload CutOff event"
-                            result << createEvent(name: "overloadX", value: "", isStateChange: true, displayed: false)
+                            result << createEvent(name: "loadLevel", value: "normal", isStateChange: true, displayed: false)
                         	//result << createEvent(name: "switchX", value: device.currentValue("switch"), displayed: false) // Don't clear it here since we get false positives for clearing, it'll be done when the switch turns on next
                             break
 
@@ -297,7 +320,7 @@ def zwaveEvent(physicalgraph.zwave.commands.notificationv3.NotificationReport cm
                     
                 case 0x08:
                 	log.info "Received Overload CutOff event"
-                	result << createEvent(name: "overloadX", value: "overload", descriptionText: "Overload cutoff detected", isStateChange: true, displayed: true)
+                	result << createEvent(name: "loadLevel", value: "overload", descriptionText: "Overload cutoff detected", isStateChange: true, displayed: true)
                 	result << createEvent(name: "switchX", value: "overload", isStateChange: true, displayed: false)
                 	break
 
@@ -329,7 +352,7 @@ def zwaveEvent(physicalgraph.zwave.commands.meterv3.MeterReport cmd) {
 	} else if (cmd.scale == 4) {
 		result << createEvent(name: "voltage", value: (float) (Math.round(cmd.scaledMeterValue * 10.0) / 10.0), unit: "V")
 	} else if (cmd.scale == 5) {
-		result << createEvent(name: "amperage", value: (float) (Math.round(cmd.scaledMeterValue * 10.0) / 10.0), unit: "A")
+		result << createEvent(name: "current", value: (float) (Math.round(cmd.scaledMeterValue * 10.0) / 10.0), unit: "A")
 	} else {
         log.warn "Unknown Meter Report: $cmd"
     }
@@ -381,11 +404,13 @@ def zwaveEvent(physicalgraph.zwave.commands.configurationv1.ConfigurationReport 
         	switch (cmd.configurationValue[0]) {
                 case paramMap.LED.Disabled:
     	            result << createEvent(name: "indicatorStatus", value: "never")
+                    result << createEvent(name: "led", value: "off")
                 	log.info "LED Off"
                     break
                     
                 case paramMap.LED.Enabled:
 	                result << createEvent(name: "indicatorStatus", value: "when on")
+                    result << createEvent(name: "led", value: "on")
                 	log.info "LED On"
                     break
                     
@@ -465,22 +490,49 @@ def zwaveEvent(physicalgraph.zwave.Command cmd) {
 	[:]
 }
 
-def on(def refreshConfig = false) {
-    log.trace "Turning switch on, refresh params: $refreshConfig"
+def on() {
+    log.trace "Turning switch on"
     
     def cmds = []
     cmds << command(zwave.switchBinaryV1.switchBinarySet(switchValue: 0xFF))
-    cmds << refresh(refreshConfig)
+    cmds << refresh(false)
     delayBetween(cmds, 1000)
 }
 
-def off(def refreshConfig = false) {
-    log.trace "Turning switch off, refresh params: $refreshConfig"
+def off() {
+    log.trace "Turning switch off"
     
     def cmds = []
     cmds << command(zwave.switchBinaryV1.switchBinarySet(switchValue: 0x00))
-    cmds << refresh(refreshConfig)
+    cmds << refresh(false)
     delayBetween(cmds, 1000)
+}
+
+def setLed(mode) {
+	log.trace "Setting LED: $mode"
+    switch (mode) {
+        case "on":
+        	enableLed()
+            break
+            
+        case "off":
+        	disableLed()
+        	break
+            
+        default:
+            log.error "Invalid mode: $mode"
+            break
+    }
+}
+
+def enableLed() {
+    log.trace "Enabling LED"
+    indicatorWhenOn()
+}
+
+def disableLed() {
+    log.trace "Disabling LED"
+    indicatorNever()
 }
 
 def indicatorWhenOn() {
@@ -503,9 +555,17 @@ def indicatorNever() {
     ])
 }
 
-def resetKWH() {
-    log.trace "Resetting KWh"
-	commands([
+def setReset(delay = null) {
+    log.trace "Resetting energy with delay $delay"
+    resetEnergy()
+}
+
+def resetEnergy() {
+    log.trace "Resetting energy"
+    sendEvent(name: "resetEnergy", value: "resetting", isStateChange: true, descriptionText: "Resetting energy meter")
+    runIn(RESET_DELAY, delayedEvent, [data: [name: "resetEnergy", value: "ready", isStateChange: true]])
+
+    commands([
 		zwave.meterV3.meterReset(),
 		zwave.meterV3.meterGet(scale: 0),
 	])
@@ -536,7 +596,11 @@ def refresh(queryConfig = true) {
         }
     }
     
-    commands(cmds)
+    if (!queryConfig) { // Coming from a manual request, don't send command
+        commands(cmds)
+    } else {
+        sendHubCommand(response(commands(cmds)).toHubAction()) // Send actions to hub since this is called offline
+    }
 }
 
 def poll() {
@@ -546,6 +610,16 @@ def poll() {
 
 def configure() {
     log.trace "Configure called\nZWInfo: ${zwaveInfo}}"
+    
+    sendEvent(name: "resetEnergy", value: "ready", displayed: false)
+
+    if (device.currentValue("loadLevel") == null) {
+        sendEvent(name: "loadLevel", value: "normal", displayed: false)
+    }
+    
+    if (device.currentValue("current") == null) {
+        sendEvent(name: "current", value: (float) (0.0), unit: "A")
+    }
     
     def cmds = []
     
@@ -675,3 +749,5 @@ private reverseValue(value) {
 }
 
 // THIS IS THE END OF THE FILE
+
+
